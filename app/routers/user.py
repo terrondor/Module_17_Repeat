@@ -4,8 +4,9 @@ from typing import Annotated
 from sqlalchemy import insert, select, update, delete
 
 from app.backend.db_depends import get_db
-from app.models import User
+from app.models import User, Task
 from app.schemas import CreateUser, UpdateUser
+from slugify import slugify
 
 router = APIRouter(prefix="/user", tags=['user'])
 
@@ -14,12 +15,12 @@ async def all_users(db: Annotated[Session, Depends(get_db)]):
     users = db.scalars(select(User).where(User.is_active == True)).all()
     return list(users)
 
-@router.get("/{user_id}")
-async def user_by_id(user_id: int, db: Annotated[Session, Depends(get_db)]):
-    user = db.scalars(select(User).where(User.id == user_id)).first()
-    if not user:
+@router.get("/{user_id}/tasks")
+async def task_by_user_id(user_id: int, db: Annotated[Session, Depends(get_db)]):
+    tasks = db.scalars(select(Task).where(Task.user_id == user_id)).all()
+    if not tasks:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User was not found")
-    return user
+    return list(tasks)
 
 @router.post("/create")
 async def create_user(create_user: CreateUser, db: Annotated[Session, Depends(get_db)]):
@@ -28,7 +29,8 @@ async def create_user(create_user: CreateUser, db: Annotated[Session, Depends(ge
             username=create_user.username,
             firstname=create_user.firstname,
             lastname=create_user.lastname,
-            age=create_user.age
+            age=create_user.age,
+            slug = slugify(create_user.username)
         )
     )
     db.commit()
@@ -64,6 +66,8 @@ async def delete_user(user_id: int, db: Annotated[Session, Depends(get_db)]):
     user = db.scalars(select(User).where(User.id == user_id)).first()
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    db.execute(delete(Task).where(Task.user_id == user_id))
 
     db.execute(delete(User).where(User.id == user_id))
     db.commit()
